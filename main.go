@@ -6,6 +6,7 @@ import (
 	"slices"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
+	"github.com/wailsapp/wails/v3/pkg/events"
 )
 
 //go:embed all:frontend/dist
@@ -39,28 +40,25 @@ func main() {
 	})
 
 	window := app.Window.NewWithOptions(application.WebviewWindowOptions{
-		Title:  "Billy",
-		Width:  420,
-		Height: 620,
-		MinWidth:  360,
+		Title:     "Billy",
+		Width:     500,
+		Height:    640,
+		MinWidth:  420,
 		MinHeight: 480,
+		Hidden:    true, // always start hidden; tray click or startup shows it
 		Mac: application.MacWindow{
 			Backdrop:                application.MacBackdropTranslucent,
 			TitleBar:                application.MacTitleBarHiddenInsetUnified,
 			InvisibleTitleBarHeight: 30,
 		},
-		BackgroundColour:         application.NewRGBA(13, 13, 18, 255),
-		URL:                      "/",
+		BackgroundColour:           application.NewRGBA(13, 13, 18, 255),
+		URL:                        "/",
 		DefaultContextMenuDisabled: os.Getenv("BILLY_DEV") != "1",
-		HideOnFocusLost:          true,
+		HideOnFocusLost:            true,
 	})
 
 	appService.app = app
 	appService.window = window
-
-	if launchedAtLogin {
-		window.Hide()
-	}
 
 	// System tray
 	tray := app.SystemTray.New()
@@ -80,6 +78,13 @@ func main() {
 		app.Quit()
 	})
 	tray.SetMenu(menu)
+
+	// On first launch (not login-item), drop the window down from the tray icon
+	if !launchedAtLogin {
+		app.Event.OnApplicationEvent(events.Common.ApplicationStarted, func(e *application.ApplicationEvent) {
+			tray.ShowWindow()
+		})
+	}
 
 	if err := app.Run(); err != nil {
 		println("Error:", err.Error())

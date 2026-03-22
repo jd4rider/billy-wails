@@ -77,7 +77,7 @@ func (a *App) PopOut() {
 		a.window.Center()
 		a.popOut = true
 	} else {
-		a.window.SetSize(420, 620)
+		a.window.SetSize(500, 640)
 		a.window.SetAlwaysOnTop(false)
 		a.popOut = false
 	}
