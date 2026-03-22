@@ -1,11 +1,15 @@
 import { useState, useEffect, useRef } from 'react';
 import billyIcon from './assets/images/billy-icon.png';
 import './App.css';
-import { GetStatus, SendMessage, ListModels, PopOut, OpenInstallPage, GetPlatform } from '../wailsjs/go/main/App';
+import {
+  GetStatus, SendMessage, ListModels, PopOut, OpenInstallPage, GetPlatform,
+  GetConversations, GetMessages, GetMemories,
+} from '../wailsjs/go/main/App';
 import { EventsOn } from '../wailsjs/runtime/runtime';
 import { main } from '../wailsjs/go/models';
 
 type Theme = 'system' | 'dark' | 'light';
+type SidebarTab = 'history' | 'memories';
 
 function applyTheme(theme: Theme) {
   document.documentElement.setAttribute('data-theme', theme);
@@ -21,6 +25,11 @@ function App() {
   const [activeModel, setActiveModel] = useState('qwen2.5-coder:7b');
   const [showModelPicker, setShowModelPicker] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showSidebar, setShowSidebar] = useState(false);
+  const [sidebarTab, setSidebarTab] = useState<SidebarTab>('history');
+  const [conversations, setConversations] = useState<main.ConversationSummary[]>([]);
+  const [memories, setMemories] = useState<main.MemoryItem[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
   const [theme, setTheme] = useState<Theme>(() => {
     return (localStorage.getItem('billy-theme') as Theme) || 'system';
   });
@@ -28,7 +37,6 @@ function App() {
   const bottomRef = useRef<HTMLDivElement>(null);
   const streamBuffer = useRef('');
 
-  // Apply theme on mount and whenever it changes
   useEffect(() => { applyTheme(theme); }, [theme]);
 
   function changeTheme(t: Theme) {
@@ -38,7 +46,6 @@ function App() {
   }
 
   useEffect(() => {
-    // Load status and models on mount
     GetStatus().then(s => {
       setStatus(s);
       if (s.activeModel) setActiveModel(s.activeModel);
@@ -46,7 +53,6 @@ function App() {
     ListModels().then(m => { if (m) setModels(m); });
     GetPlatform().then(setPlatform);
 
-    // Subscribe to streaming events
     EventsOn('chat:token', (token: string) => {
       streamBuffer.current += token;
       setMessages(prev => {
@@ -66,10 +72,9 @@ function App() {
     EventsOn('chat:error', (err: string) => {
       streamBuffer.current = '';
       setStreaming(false);
-      setMessages(prev => [...prev, { role: 'assistant', content: `⚠️ ${err}` }]);
+      setMessages(prev => [...prev, new main.Message({ role: 'assistant', content: `⚠️ ${err}` })]);
     });
 
-    // Refresh status every 15s
     const interval = setInterval(() => {
       GetStatus().then(setStatus);
     }, 15000);
@@ -108,12 +113,32 @@ function App() {
     streamBuffer.current = '';
   }
 
-  const notReady = status && !status.ollamaReady;
-  const notInstalled = status && !status.billyInstalled;
+  async function openSidebar(tab: SidebarTab) {
+    setSidebarTab(tab);
+    setShowSidebar(true);
+    setLoadingHistory(true);
+    if (tab === 'history') {
+      const convs = await GetConversations();
+      setConversations(convs || []);
+    } else {
+      const mems = await GetMemories();
+      setMemories(mems || []);
+    }
+    setLoadingHistory(false);
+  }
+
+  async function loadConversation(convID: string) {
+    const msgs = await GetMessages(convID);
+    if (!msgs || msgs.length === 0) return;
+    setMessages(msgs.map(m => new main.Message({ role: m.role, content: m.content })));
+    setShowSidebar(false);
+  }
+
+  const ollamaOffline = status && !status.ollamaReady;
 
   return (
     <div className="app">
-      {/* Title bar (macOS inset traffic lights area) */}
+      {/* Title bar */}
       <div className="titlebar" style={{ '--wails-draggable': 'drag' } as React.CSSProperties}>
         <div className="titlebar-left">
           <img src={billyIcon} className="titlebar-icon" alt="Billy" />
@@ -123,6 +148,8 @@ function App() {
           )}
         </div>
         <div className="titlebar-right">
+          <button className="icon-btn" title="History" onClick={() => showSidebar && sidebarTab === 'history' ? setShowSidebar(false) : openSidebar('history')}>🕐</button>
+          <button className="icon-btn" title="Memories" onClick={() => showSidebar && sidebarTab === 'memories' ? setShowSidebar(false) : openSidebar('memories')}>🧠</button>
           <button className="icon-btn" title="Settings" onClick={() => setShowSettings(v => !v)}>⚙</button>
           <button className="icon-btn" title="Pop out" onClick={() => PopOut()}>⤢</button>
           <button className="icon-btn" title="Clear chat" onClick={clearChat}>⊘</button>
@@ -155,16 +182,46 @@ function App() {
         </>
       )}
 
-      {/* Not installed banner */}
-      {notInstalled && (
-        <div className="banner banner-warn">
-          <span>Billy CLI not found.</span>
-          <button className="banner-btn" onClick={() => OpenInstallPage()}>Install →</button>
-        </div>
+      {/* Sidebar: history + memories */}
+      {showSidebar && (
+        <>
+          <div className="sidebar-overlay" onClick={() => setShowSidebar(false)} />
+          <div className="sidebar">
+            <div className="sidebar-tabs">
+              <button className={`sidebar-tab${sidebarTab === 'history' ? ' active' : ''}`} onClick={() => openSidebar('history')}>History</button>
+              <button className={`sidebar-tab${sidebarTab === 'memories' ? ' active' : ''}`} onClick={() => openSidebar('memories')}>Memories</button>
+            </div>
+            <div className="sidebar-content">
+              {loadingHistory && <div className="sidebar-empty">Loading…</div>}
+
+              {!loadingHistory && sidebarTab === 'history' && (
+                conversations.length === 0
+                  ? <div className="sidebar-empty">No history yet.<br/>Start a conversation in the Billy CLI.</div>
+                  : conversations.map(c => (
+                    <button key={c.id} className="history-item" onClick={() => loadConversation(c.id)}>
+                      <span className="history-title">{c.title}</span>
+                      <span className="history-meta">{c.model} · {c.updatedAt}</span>
+                    </button>
+                  ))
+              )}
+
+              {!loadingHistory && sidebarTab === 'memories' && (
+                memories.length === 0
+                  ? <div className="sidebar-empty">No memories yet.<br/>Use <code>/remember</code> in the Billy CLI.</div>
+                  : memories.map(m => (
+                    <div key={m.id} className="memory-item">
+                      <span className="memory-content">{m.content}</span>
+                      <span className="memory-date">{m.createdAt}</span>
+                    </div>
+                  ))
+              )}
+            </div>
+          </div>
+        </>
       )}
 
       {/* Ollama offline banner */}
-      {notReady && !notInstalled && (
+      {ollamaOffline && (
         <div className="banner banner-warn">
           Ollama not running — start Ollama to use Billy.
         </div>
@@ -237,7 +294,7 @@ function App() {
       <div className="statusbar">
         <span className={`dot ${status?.ollamaReady ? 'dot-green' : 'dot-red'}`} />
         <span className="statusbar-model">{activeModel}</span>
-        {status?.billyServing && <span className="statusbar-serving">● connected</span>}
+        {status?.billyServing && <span className="statusbar-serving">● billy serve</span>}
         {status?.version && <span className="statusbar-ver">v{status.version}</span>}
       </div>
     </div>

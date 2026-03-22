@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -13,19 +12,15 @@ import (
 
 // StatusInfo is returned by GetStatus.
 type StatusInfo struct {
-	BillyInstalled bool   `json:"billyInstalled"`
-	BillyServing   bool   `json:"billyServing"`
-	OllamaReady    bool   `json:"ollamaReady"`
-	ActiveModel    string `json:"activeModel"`
-	Tier           string `json:"tier"`
-	Version        string `json:"version"`
+	BillyServing bool   `json:"billyServing"`
+	OllamaReady  bool   `json:"ollamaReady"`
+	ActiveModel  string `json:"activeModel"`
+	Tier         string `json:"tier"`
+	Version      string `json:"version"`
 }
 
 func getStatus(a *App) StatusInfo {
 	s := StatusInfo{Tier: "free"}
-
-	_, err := exec.LookPath("billy")
-	s.BillyInstalled = err == nil
 
 	if billyServingNow(a.billyURL) {
 		s.BillyServing = true

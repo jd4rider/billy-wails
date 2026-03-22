@@ -46,9 +46,58 @@ export namespace main {
 		    return a;
 		}
 	}
+	export class ConversationSummary {
+	    id: string;
+	    title: string;
+	    model: string;
+	    updatedAt: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ConversationSummary(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.title = source["title"];
+	        this.model = source["model"];
+	        this.updatedAt = source["updatedAt"];
+	    }
+	}
+	export class HistoryMessage {
+	    role: string;
+	    content: string;
+	    createdAt: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new HistoryMessage(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.role = source["role"];
+	        this.content = source["content"];
+	        this.createdAt = source["createdAt"];
+	    }
+	}
+	export class MemoryItem {
+	    id: string;
+	    content: string;
+	    createdAt: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new MemoryItem(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.content = source["content"];
+	        this.createdAt = source["createdAt"];
+	    }
+	}
 	
 	export class StatusInfo {
-	    billyInstalled: boolean;
 	    billyServing: boolean;
 	    ollamaReady: boolean;
 	    activeModel: string;
@@ -61,7 +110,6 @@ export namespace main {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.billyInstalled = source["billyInstalled"];
 	        this.billyServing = source["billyServing"];
 	        this.ollamaReady = source["ollamaReady"];
 	        this.activeModel = source["activeModel"];

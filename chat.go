@@ -36,8 +36,15 @@ type ollamaChunk struct {
 }
 
 // streamMessage is the goroutine that drives AI streaming.
-// It prefers billy serve if available, falling back to Ollama directly.
+// It injects the system prompt (identity + memories), then prefers
+// billy serve if available, falling back to Ollama directly.
 func streamMessage(a *App, req ChatRequest) {
+	// Prepend system prompt if not already present
+	if len(req.Messages) == 0 || req.Messages[0].Role != "system" {
+		systemMsg := Message{Role: "system", Content: buildSystemPrompt()}
+		req.Messages = append([]Message{systemMsg}, req.Messages...)
+	}
+
 	if billyServingNow(a.billyURL) {
 		streamViaBilly(a, req)
 		return

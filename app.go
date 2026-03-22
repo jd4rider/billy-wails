@@ -76,3 +76,30 @@ exec.Command("xdg-open", url).Start()
 func (a *App) GetPlatform() string {
 return runtime.GOOS
 }
+
+// GetConversations returns recent conversations from ~/.localai/history.db.
+func (a *App) GetConversations() []ConversationSummary {
+	convs, _ := readConversations()
+	if convs == nil {
+		return []ConversationSummary{}
+	}
+	return convs
+}
+
+// GetMessages returns messages for a given conversation ID.
+func (a *App) GetMessages(convID string) []HistoryMessage {
+	msgs, _ := readMessages(convID)
+	if msgs == nil {
+		return []HistoryMessage{}
+	}
+	return msgs
+}
+
+// GetMemories returns all memories stored by the CLI.
+func (a *App) GetMemories() []MemoryItem {
+	mems, _ := readMemories()
+	if mems == nil {
+		return []MemoryItem{}
+	}
+	return mems
+}
