@@ -17,6 +17,8 @@ export namespace main {
 	export class ChatRequest {
 	    messages: Message[];
 	    model: string;
+	    convId: string;
+	    userText: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new ChatRequest(source);
@@ -26,6 +28,8 @@ export namespace main {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.messages = this.convertValues(source["messages"], Message);
 	        this.model = source["model"];
+	        this.convId = source["convId"];
+	        this.userText = source["userText"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

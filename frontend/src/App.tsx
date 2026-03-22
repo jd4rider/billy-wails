@@ -2,8 +2,9 @@ import { useState, useEffect, useRef } from 'react';
 import billyIcon from './assets/images/billy-icon.png';
 import './App.css';
 import {
-  GetStatus, SendMessage, ListModels, PopOut, OpenInstallPage, GetPlatform,
-  GetConversations, GetMessages, GetMemories,
+  GetStatus, SendMessage, ListModels, PopOut, GetPlatform,
+  GetConversations, GetMessages, GetMemories, AddMemory, DeleteMemory,
+  SetActiveConversation, NewConversation,
 } from '../wailsjs/go/main/App';
 import { EventsOn } from '../wailsjs/runtime/runtime';
 import { main } from '../wailsjs/go/models';
@@ -23,6 +24,8 @@ function App() {
   const [status, setStatus] = useState<main.StatusInfo | null>(null);
   const [models, setModels] = useState<string[]>([]);
   const [activeModel, setActiveModel] = useState('qwen2.5-coder:7b');
+  const [activeConvID, setActiveConvID] = useState('');
+  const [activeConvTitle, setActiveConvTitle] = useState('');
   const [showModelPicker, setShowModelPicker] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showSidebar, setShowSidebar] = useState(false);
@@ -30,6 +33,7 @@ function App() {
   const [conversations, setConversations] = useState<main.ConversationSummary[]>([]);
   const [memories, setMemories] = useState<main.MemoryItem[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [newMemory, setNewMemory] = useState('');
   const [theme, setTheme] = useState<Theme>(() => {
     return (localStorage.getItem('billy-theme') as Theme) || 'system';
   });
@@ -64,15 +68,24 @@ function App() {
       });
     });
 
-    EventsOn('chat:done', () => {
+    EventsOn('chat:done', (convID: string) => {
       streamBuffer.current = '';
       setStreaming(false);
+      if (convID) setActiveConvID(convID);
     });
 
     EventsOn('chat:error', (err: string) => {
       streamBuffer.current = '';
       setStreaming(false);
       setMessages(prev => [...prev, new main.Message({ role: 'assistant', content: `⚠️ ${err}` })]);
+    });
+
+    // AI finished generating a title — update conversation list and header
+    EventsOn('conv:titled', (data: { id: string; title: string }) => {
+      setActiveConvTitle(data.title);
+      setConversations(prev =>
+        prev.map(c => c.id === data.id ? { ...c, title: data.title } : c)
+      );
     });
 
     const interval = setInterval(() => {
@@ -98,7 +111,7 @@ function App() {
     setStreaming(true);
     streamBuffer.current = '';
 
-    SendMessage(new main.ChatRequest({ messages: newMessages, model: activeModel }));
+    SendMessage(new main.ChatRequest({ messages: newMessages, model: activeModel, userText: text }));
   }
 
   function handleKeyDown(e: React.KeyboardEvent) {
@@ -110,7 +123,10 @@ function App() {
 
   function clearChat() {
     setMessages([]);
+    setActiveConvID('');
+    setActiveConvTitle('');
     streamBuffer.current = '';
+    NewConversation();
   }
 
   async function openSidebar(tab: SidebarTab) {
@@ -127,11 +143,31 @@ function App() {
     setLoadingHistory(false);
   }
 
-  async function loadConversation(convID: string) {
-    const msgs = await GetMessages(convID);
+  async function loadConversation(conv: main.ConversationSummary) {
+    const msgs = await GetMessages(conv.id);
     if (!msgs || msgs.length === 0) return;
     setMessages(msgs.map(m => new main.Message({ role: m.role, content: m.content })));
+    setActiveConvID(conv.id);
+    setActiveConvTitle(conv.title);
+    SetActiveConversation(conv.id);
     setShowSidebar(false);
+  }
+
+  async function saveMemory() {
+    const text = newMemory.trim();
+    if (!text) return;
+    const id = await AddMemory(text);
+    if (id) {
+      const now = new Date();
+      const dateStr = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      setMemories(prev => [...prev, new main.MemoryItem({ id, content: text, createdAt: dateStr })]);
+      setNewMemory('');
+    }
+  }
+
+  async function removeMemory(id: string) {
+    await DeleteMemory(id);
+    setMemories(prev => prev.filter(m => m.id !== id));
   }
 
   const ollamaOffline = status && !status.ollamaReady;
@@ -142,7 +178,9 @@ function App() {
       <div className="titlebar" style={{ '--wails-draggable': 'drag' } as React.CSSProperties}>
         <div className="titlebar-left">
           <img src={billyIcon} className="titlebar-icon" alt="Billy" />
-          <span className="titlebar-name">Billy</span>
+          <span className="titlebar-name">
+            {activeConvTitle || 'Billy'}
+          </span>
           {status && (
             <span className={`tier-badge tier-${status.tier}`}>{status.tier}</span>
           )}
@@ -152,7 +190,7 @@ function App() {
           <button className="icon-btn" title="Memories" onClick={() => showSidebar && sidebarTab === 'memories' ? setShowSidebar(false) : openSidebar('memories')}>🧠</button>
           <button className="icon-btn" title="Settings" onClick={() => setShowSettings(v => !v)}>⚙</button>
           <button className="icon-btn" title="Pop out" onClick={() => PopOut()}>⤢</button>
-          <button className="icon-btn" title="Clear chat" onClick={clearChat}>⊘</button>
+          <button className="icon-btn" title="New chat" onClick={clearChat}>⊘</button>
         </div>
       </div>
 
@@ -196,9 +234,13 @@ function App() {
 
               {!loadingHistory && sidebarTab === 'history' && (
                 conversations.length === 0
-                  ? <div className="sidebar-empty">No history yet.<br/>Start a conversation in the Billy CLI.</div>
+                  ? <div className="sidebar-empty">No history yet.<br/>Start a conversation to get going.</div>
                   : conversations.map(c => (
-                    <button key={c.id} className="history-item" onClick={() => loadConversation(c.id)}>
+                    <button
+                      key={c.id}
+                      className={`history-item${c.id === activeConvID ? ' active' : ''}`}
+                      onClick={() => loadConversation(c)}
+                    >
                       <span className="history-title">{c.title}</span>
                       <span className="history-meta">{c.model} · {c.updatedAt}</span>
                     </button>
@@ -206,14 +248,30 @@ function App() {
               )}
 
               {!loadingHistory && sidebarTab === 'memories' && (
-                memories.length === 0
-                  ? <div className="sidebar-empty">No memories yet.<br/>Use <code>/remember</code> in the Billy CLI.</div>
-                  : memories.map(m => (
-                    <div key={m.id} className="memory-item">
-                      <span className="memory-content">{m.content}</span>
-                      <span className="memory-date">{m.createdAt}</span>
-                    </div>
-                  ))
+                <>
+                  <div className="memory-input-row">
+                    <input
+                      className="memory-input"
+                      placeholder="Add a memory…"
+                      value={newMemory}
+                      onChange={e => setNewMemory(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && saveMemory()}
+                    />
+                    <button className="memory-save-btn" onClick={saveMemory} disabled={!newMemory.trim()}>+</button>
+                  </div>
+                  {memories.length === 0
+                    ? <div className="sidebar-empty">No memories yet.<br/>Use <code>/remember</code> in the CLI<br/>or add one above.</div>
+                    : memories.map(m => (
+                      <div key={m.id} className="memory-item">
+                        <span className="memory-content">{m.content}</span>
+                        <div className="memory-footer">
+                          <span className="memory-date">{m.createdAt}</span>
+                          <button className="memory-delete" onClick={() => removeMemory(m.id)} title="Forget">✕</button>
+                        </div>
+                      </div>
+                    ))
+                  }
+                </>
               )}
             </div>
           </div>

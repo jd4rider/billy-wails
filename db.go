@@ -1,7 +1,9 @@
 package main
 
 import (
+	"crypto/rand"
 	"database/sql"
+	"encoding/hex"
 	"os"
 	"path/filepath"
 	"time"
@@ -24,11 +26,17 @@ type HistoryMessage struct {
 	CreatedAt string `json:"createdAt"`
 }
 
-// MemoryItem is a single remembered fact from the CLI.
+// MemoryItem is a single remembered fact.
 type MemoryItem struct {
 	ID        string `json:"id"`
 	Content   string `json:"content"`
 	CreatedAt string `json:"createdAt"`
+}
+
+func newID() string {
+	b := make([]byte, 8)
+	rand.Read(b)
+	return hex.EncodeToString(b)
 }
 
 func dbPath() string {
@@ -38,15 +46,59 @@ func dbPath() string {
 
 func openDB() (*sql.DB, error) {
 	path := dbPath()
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		return nil, nil // DB doesn't exist yet — billy CLI hasn't been run
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		return nil, err
 	}
-	return sql.Open("sqlite", "file:"+path+"?mode=ro&_journal=WAL")
+	db, err := sql.Open("sqlite", "file:"+path+"?_journal=WAL&_busy_timeout=5000")
+	if err != nil {
+		return nil, err
+	}
+	if err := ensureSchema(db); err != nil {
+		db.Close()
+		return nil, err
+	}
+	return db, nil
 }
+
+const schema = `
+CREATE TABLE IF NOT EXISTS conversations (
+	id                TEXT PRIMARY KEY,
+	title             TEXT NOT NULL,
+	model             TEXT NOT NULL,
+	compacted_summary TEXT NOT NULL DEFAULT '',
+	created_at        TIMESTAMP NOT NULL,
+	updated_at        TIMESTAMP NOT NULL
+);
+CREATE TABLE IF NOT EXISTS messages (
+	id              TEXT PRIMARY KEY,
+	conversation_id TEXT NOT NULL,
+	role            TEXT NOT NULL,
+	content         TEXT NOT NULL,
+	created_at      TIMESTAMP NOT NULL,
+	FOREIGN KEY(conversation_id) REFERENCES conversations(id)
+);
+CREATE TABLE IF NOT EXISTS memories (
+	id         TEXT PRIMARY KEY,
+	content    TEXT NOT NULL,
+	created_at TIMESTAMP NOT NULL
+);
+`
+
+func ensureSchema(db *sql.DB) error {
+	_, err := db.Exec(schema)
+	if err != nil {
+		return err
+	}
+	// Migration guard: add column if upgrading from older CLI DB
+	_, _ = db.Exec(`ALTER TABLE conversations ADD COLUMN compacted_summary TEXT NOT NULL DEFAULT ''`)
+	return nil
+}
+
+// ── Read ──────────────────────────────────────────────────────────────────────
 
 func readConversations() ([]ConversationSummary, error) {
 	db, err := openDB()
-	if err != nil || db == nil {
+	if err != nil {
 		return nil, err
 	}
 	defer db.Close()
@@ -74,7 +126,7 @@ func readConversations() ([]ConversationSummary, error) {
 
 func readMessages(convID string) ([]HistoryMessage, error) {
 	db, err := openDB()
-	if err != nil || db == nil {
+	if err != nil {
 		return nil, err
 	}
 	defer db.Close()
@@ -103,7 +155,7 @@ func readMessages(convID string) ([]HistoryMessage, error) {
 
 func readMemories() ([]MemoryItem, error) {
 	db, err := openDB()
-	if err != nil || db == nil {
+	if err != nil {
 		return nil, err
 	}
 	defer db.Close()
@@ -129,8 +181,71 @@ func readMemories() ([]MemoryItem, error) {
 	return out, rows.Err()
 }
 
+// ── Write ─────────────────────────────────────────────────────────────────────
+
+func writeConversation(id, title, model string) error {
+	db, err := openDB()
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	now := time.Now()
+	_, err = db.Exec(
+		`INSERT INTO conversations (id, title, model, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`,
+		id, title, model, now, now,
+	)
+	return err
+}
+
+func writeMessage(msgID, convID, role, content string) error {
+	db, err := openDB()
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	now := time.Now()
+	_, err = db.Exec(
+		`INSERT INTO messages (id, conversation_id, role, content, created_at) VALUES (?, ?, ?, ?, ?)`,
+		msgID, convID, role, content, now,
+	)
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec(
+		`UPDATE conversations SET updated_at = ? WHERE id = ?`, now, convID,
+	)
+	return err
+}
+
+// writeMemory saves a new memory and returns its ID.
+func writeMemory(content string) (string, error) {
+	db, err := openDB()
+	if err != nil {
+		return "", err
+	}
+	defer db.Close()
+	id := newID()
+	_, err = db.Exec(
+		`INSERT INTO memories (id, content, created_at) VALUES (?, ?, ?)`,
+		id, content, time.Now(),
+	)
+	return id, err
+}
+
+// deleteMemory removes a memory by ID.
+func deleteMemory(id string) error {
+	db, err := openDB()
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	_, err = db.Exec(`DELETE FROM memories WHERE id = ?`, id)
+	return err
+}
+
+// ── System prompt ─────────────────────────────────────────────────────────────
+
 // buildSystemPrompt constructs the system message injected before every chat.
-// It includes Billy's identity and any memories stored by the CLI.
 func buildSystemPrompt() string {
 	base := `You are Billy, a local AI coding assistant built by billy.sh. You help developers write, debug, explain, and improve code. You are concise, practical, and prefer showing code examples over long explanations. You run entirely locally — no data ever leaves the user's machine.`
 
@@ -145,3 +260,28 @@ func buildSystemPrompt() string {
 	}
 	return base
 }
+
+// updateConversationTitle updates the title of a conversation after AI generation.
+func updateConversationTitle(convID, title string) error {
+	db, err := openDB()
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	_, err = db.Exec(`UPDATE conversations SET title = ? WHERE id = ?`, title, convID)
+	return err
+}
+
+// countMessages returns how many messages exist for a conversation.
+func countMessages(convID string) int {
+	db, err := openDB()
+	if err != nil {
+		return 0
+	}
+	defer db.Close()
+	var n int
+	db.QueryRow(`SELECT COUNT(*) FROM messages WHERE conversation_id = ?`, convID).Scan(&n)
+	return n
+}
+
+

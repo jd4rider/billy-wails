@@ -10,10 +10,11 @@ wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
 
 // App is the main application struct. All exported methods are callable from the frontend.
 type App struct {
-ctx      context.Context
-ollamaURL string
-billyURL  string
-popOut    bool
+	ctx          context.Context
+	ollamaURL    string
+	billyURL     string
+	popOut       bool
+	currentConvID string
 }
 
 func NewApp() *App {
@@ -36,8 +37,30 @@ return getStatus(a)
 }
 
 // SendMessage streams an AI response via events: "chat:token", "chat:done", "chat:error".
+// chat:done emits the convID so the frontend can track the active conversation.
 func (a *App) SendMessage(req ChatRequest) {
-go streamMessage(a, req)
+	// Create a new conversation on first message of a session
+	if a.currentConvID == "" {
+		a.currentConvID = newID()
+		model := req.Model
+		if model == "" {
+			model = defaultModel()
+		}
+		_ = writeConversation(a.currentConvID, "New conversation", model)
+	}
+	req.ConvID = a.currentConvID
+	go streamMessage(a, req)
+}
+
+// SetActiveConversation resumes an existing conversation (from history sidebar or CLI).
+// All subsequent messages will be appended to this conversation.
+func (a *App) SetActiveConversation(convID string) {
+	a.currentConvID = convID
+}
+
+// NewConversation clears the active conversation so the next message starts a fresh one.
+func (a *App) NewConversation() {
+	a.currentConvID = ""
 }
 
 // ListModels returns locally available Ollama model names.
@@ -102,4 +125,15 @@ func (a *App) GetMemories() []MemoryItem {
 		return []MemoryItem{}
 	}
 	return mems
+}
+
+// AddMemory saves a new memory and returns its ID.
+func (a *App) AddMemory(content string) string {
+	id, _ := writeMemory(content)
+	return id
+}
+
+// DeleteMemory removes a memory by ID.
+func (a *App) DeleteMemory(id string) {
+	_ = deleteMemory(id)
 }
