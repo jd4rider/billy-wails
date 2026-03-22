@@ -3,12 +3,9 @@ package main
 import (
 	"embed"
 	"os"
+	"slices"
 
-	"github.com/wailsapp/wails/v2"
-	"github.com/wailsapp/wails/v2/pkg/options"
-	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
-	"github.com/wailsapp/wails/v2/pkg/options/mac"
-	"github.com/wailsapp/wails/v2/pkg/options/windows"
+	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
 //go:embed all:frontend/dist
@@ -17,52 +14,74 @@ var assets embed.FS
 //go:embed build/appicon.png
 var appIcon []byte
 
-func main() {
-	app := NewApp()
+//go:embed build/trayicon.png
+var trayIconData []byte
 
-	err := wails.Run(&options.App{
-		Title:             "Billy",
-		Width:             420,
-		Height:            620,
-		MinWidth:          360,
-		MinHeight:         480,
-		Frameless:         false,
-		AlwaysOnTop:       false,
-		HideWindowOnClose: true, // stay in tray instead of quitting
-		BackgroundColour:  &options.RGBA{R: 13, G: 13, B: 18, A: 255},
-		AssetServer: &assetserver.Options{
-			Assets: assets,
+func main() {
+	// Detect if launched via "login item" (--login flag set when registering the login item)
+	launchedAtLogin := slices.Contains(os.Args[1:], "--login")
+
+	appService := NewApp()
+
+	app := application.New(application.Options{
+		Name:        "Billy",
+		Description: "Local AI coding assistant",
+		Icon:        appIcon,
+		Services: []application.Service{
+			application.NewService(appService),
 		},
-		OnStartup:  app.startup,
-		OnShutdown: app.shutdown,
-		Bind: []interface{}{
-			app,
+		Assets: application.AssetOptions{
+			Handler: application.BundledAssetFileServer(assets),
 		},
-		Mac: &mac.Options{
-			TitleBar:             mac.TitleBarHiddenInset(),
-			WebviewIsTransparent: true,
-			WindowIsTranslucent:  true,
-			Appearance:           mac.NSAppearanceNameDarkAqua,
-			About: &mac.AboutInfo{
-				Title:   "Billy",
-				Message: "Local AI coding assistant",
-				Icon:    appIcon,
-			},
+		Mac: application.MacOptions{
+			ApplicationShouldTerminateAfterLastWindowClosed: false,
 		},
-		Windows: &windows.Options{
-			WebviewIsTransparent:              false,
-			WindowIsTranslucent:               false,
-			BackdropType:                      windows.Mica,
-			DisableWindowIcon:                 false,
-			IsZoomControlEnabled:              false,
-			DisablePinchZoom:                  true,
-			DisableFramelessWindowDecorations: false,
-		},
-		// Disable right-click context menu in production
-		EnableDefaultContextMenu: os.Getenv("BILLY_DEV") == "1",
 	})
 
-	if err != nil {
+	window := app.Window.NewWithOptions(application.WebviewWindowOptions{
+		Title:  "Billy",
+		Width:  420,
+		Height: 620,
+		MinWidth:  360,
+		MinHeight: 480,
+		Mac: application.MacWindow{
+			Backdrop:                application.MacBackdropTranslucent,
+			TitleBar:                application.MacTitleBarHiddenInsetUnified,
+			InvisibleTitleBarHeight: 30,
+		},
+		BackgroundColour:         application.NewRGBA(13, 13, 18, 255),
+		URL:                      "/",
+		DefaultContextMenuDisabled: os.Getenv("BILLY_DEV") != "1",
+		HideOnFocusLost:          true,
+	})
+
+	appService.app = app
+	appService.window = window
+
+	if launchedAtLogin {
+		window.Hide()
+	}
+
+	// System tray
+	tray := app.SystemTray.New()
+	if len(trayIconData) > 0 {
+		tray.SetTemplateIcon(trayIconData)
+	}
+	tray.AttachWindow(window).WindowOffset(5)
+
+	// Right-click menu
+	menu := app.NewMenu()
+	menu.Add("Show Billy").OnClick(func(ctx *application.Context) {
+		window.Show()
+		window.Focus()
+	})
+	menu.AddSeparator()
+	menu.Add("Quit Billy").OnClick(func(ctx *application.Context) {
+		app.Quit()
+	})
+	tray.SetMenu(menu)
+
+	if err := app.Run(); err != nil {
 		println("Error:", err.Error())
 	}
 }

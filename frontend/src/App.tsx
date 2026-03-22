@@ -6,7 +6,7 @@ import {
   GetConversations, GetMessages, GetMemories, AddMemory, DeleteMemory,
   SetActiveConversation, NewConversation,
 } from '../wailsjs/go/main/App';
-import { EventsOn } from '../wailsjs/runtime/runtime';
+import { Events } from '@wailsio/runtime';
 import { main } from '../wailsjs/go/models';
 
 type Theme = 'system' | 'dark' | 'light';
@@ -57,7 +57,8 @@ function App() {
     ListModels().then(m => { if (m) setModels(m); });
     GetPlatform().then(setPlatform);
 
-    EventsOn('chat:token', (token: string) => {
+    Events.On('chat:token', (ev) => {
+      const token = ev.data as string;
       streamBuffer.current += token;
       setMessages(prev => {
         const msgs = [...prev];
@@ -68,20 +69,23 @@ function App() {
       });
     });
 
-    EventsOn('chat:done', (convID: string) => {
+    Events.On('chat:done', (ev) => {
+      const convID = ev.data as string;
       streamBuffer.current = '';
       setStreaming(false);
       if (convID) setActiveConvID(convID);
     });
 
-    EventsOn('chat:error', (err: string) => {
+    Events.On('chat:error', (ev) => {
+      const err = ev.data as string;
       streamBuffer.current = '';
       setStreaming(false);
       setMessages(prev => [...prev, new main.Message({ role: 'assistant', content: `⚠️ ${err}` })]);
     });
 
     // AI finished generating a title — update conversation list and header
-    EventsOn('conv:titled', (data: { id: string; title: string }) => {
+    Events.On('conv:titled', (ev) => {
+      const data = ev.data as { id: string; title: string };
       setActiveConvTitle(data.title);
       setConversations(prev =>
         prev.map(c => c.id === data.id ? { ...c, title: data.title } : c)

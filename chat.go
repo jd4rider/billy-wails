@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-
-	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 // Message is a single chat message (user or assistant).
@@ -74,7 +72,7 @@ func streamMessage(a *App, req ChatRequest) {
 	}
 
 	// Emit done — frontend uses convID to stay in the same conversation
-	wailsRuntime.EventsEmit(a.ctx, "chat:done", req.ConvID)
+	a.window.EmitEvent("chat:done", req.ConvID)
 }
 
 // generateAndSetTitle asks Ollama for a short title and updates the DB + notifies the frontend.
@@ -84,7 +82,7 @@ func generateAndSetTitle(a *App, convID, model, userMsg, assistantMsg string) {
 		return
 	}
 	_ = updateConversationTitle(convID, title)
-	wailsRuntime.EventsEmit(a.ctx, "conv:titled", map[string]string{
+	a.window.EmitEvent("conv:titled", map[string]string{
 		"id":    convID,
 		"title": title,
 	})
@@ -133,7 +131,7 @@ func streamViaBilly(a *App, req ChatRequest) string {
 	body, _ := json.Marshal(req)
 	resp, err := http.Post(a.billyURL+"/chat", "application/json", bytes.NewReader(body))
 	if err != nil {
-		wailsRuntime.EventsEmit(a.ctx, "chat:error", err.Error())
+		a.window.EmitEvent("chat:error", err.Error())
 		return ""
 	}
 	defer resp.Body.Close()
@@ -147,7 +145,7 @@ func streamViaBilly(a *App, req ChatRequest) string {
 				break
 			}
 			buf.WriteString(token)
-			wailsRuntime.EventsEmit(a.ctx, "chat:token", token)
+			a.window.EmitEvent("chat:token", token)
 		}
 	}
 	return buf.String()
@@ -161,7 +159,7 @@ func streamViaOllama(a *App, req ChatRequest, model string) string {
 	body, _ := json.Marshal(payload)
 	resp, err := http.Post(a.ollamaURL+"/api/chat", "application/json", bytes.NewReader(body))
 	if err != nil {
-		wailsRuntime.EventsEmit(a.ctx, "chat:error", fmt.Sprintf("Ollama unreachable: %s", err.Error()))
+		a.window.EmitEvent("chat:error", fmt.Sprintf("Ollama unreachable: %s", err.Error()))
 		return ""
 	}
 	defer resp.Body.Close()
@@ -174,7 +172,7 @@ func streamViaOllama(a *App, req ChatRequest, model string) string {
 		}
 		if chunk.Message.Content != "" {
 			buf.WriteString(chunk.Message.Content)
-			wailsRuntime.EventsEmit(a.ctx, "chat:token", chunk.Message.Content)
+			a.window.EmitEvent("chat:token", chunk.Message.Content)
 		}
 		if chunk.Done {
 			break

@@ -1,45 +1,47 @@
 package main
 
 import (
-"context"
-"os/exec"
-"runtime"
+	"context"
+	"os/exec"
+	"runtime"
 
-wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
+	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
 // App is the main application struct. All exported methods are callable from the frontend.
 type App struct {
-	ctx          context.Context
-	ollamaURL    string
-	billyURL     string
-	popOut       bool
+	app           *application.App
+	window        *application.WebviewWindow
+	ollamaURL     string
+	billyURL      string
+	popOut        bool
 	currentConvID string
 }
 
 func NewApp() *App {
-return &App{
-ollamaURL: "http://127.0.0.1:11434",
-billyURL:  "http://127.0.0.1:7437",
-}
-}
-
-func (a *App) startup(ctx context.Context) {
-	a.ctx = ctx
-	initTray(a)
+	return &App{
+		ollamaURL: "http://127.0.0.1:11434",
+		billyURL:  "http://127.0.0.1:7437",
+	}
 }
 
-func (a *App) shutdown(ctx context.Context) {}
+// ServiceStartup is called by Wails v3 when the service starts.
+func (a *App) ServiceStartup(ctx context.Context, options application.ServiceOptions) error {
+	return nil
+}
+
+// ServiceShutdown is called by Wails v3 when the service stops.
+func (a *App) ServiceShutdown() error {
+	return nil
+}
 
 // GetStatus returns current health info for the UI.
 func (a *App) GetStatus() StatusInfo {
-return getStatus(a)
+	return getStatus(a)
 }
 
 // SendMessage streams an AI response via events: "chat:token", "chat:done", "chat:error".
-// chat:done emits the convID so the frontend can track the active conversation.
 func (a *App) SendMessage(req ChatRequest) {
-	// Create a new conversation on first message of a session
 	if a.currentConvID == "" {
 		a.currentConvID = newID()
 		model := req.Model
@@ -52,8 +54,7 @@ func (a *App) SendMessage(req ChatRequest) {
 	go streamMessage(a, req)
 }
 
-// SetActiveConversation resumes an existing conversation (from history sidebar or CLI).
-// All subsequent messages will be appended to this conversation.
+// SetActiveConversation resumes an existing conversation.
 func (a *App) SetActiveConversation(convID string) {
 	a.currentConvID = convID
 }
@@ -65,42 +66,42 @@ func (a *App) NewConversation() {
 
 // ListModels returns locally available Ollama model names.
 func (a *App) ListModels() []string {
-return listModels(a.ollamaURL)
+	return listModels(a.ollamaURL)
 }
 
 // PopOut toggles the window between tray-panel size and floating window size.
 func (a *App) PopOut() {
-if !a.popOut {
-wailsRuntime.WindowSetSize(a.ctx, 720, 800)
-wailsRuntime.WindowSetAlwaysOnTop(a.ctx, true)
-wailsRuntime.WindowCenter(a.ctx)
-a.popOut = true
-} else {
-wailsRuntime.WindowSetSize(a.ctx, 420, 620)
-wailsRuntime.WindowSetAlwaysOnTop(a.ctx, false)
-a.popOut = false
-}
+	if !a.popOut {
+		a.window.SetSize(720, 800)
+		a.window.SetAlwaysOnTop(true)
+		a.window.Center()
+		a.popOut = true
+	} else {
+		a.window.SetSize(420, 620)
+		a.window.SetAlwaysOnTop(false)
+		a.popOut = false
+	}
 }
 
 // OpenInstallPage opens the billy.sh install page in the default browser.
 func (a *App) OpenInstallPage() {
-url := "https://jd4rider.github.io/billy-web/#install"
-switch runtime.GOOS {
-case "darwin":
-exec.Command("open", url).Start()
-case "windows":
-exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start()
-default:
-exec.Command("xdg-open", url).Start()
-}
+	url := "https://jd4rider.github.io/billy-web/#install"
+	switch runtime.GOOS {
+	case "darwin":
+		exec.Command("open", url).Start()
+	case "windows":
+		exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start()
+	default:
+		exec.Command("xdg-open", url).Start()
+	}
 }
 
 // GetPlatform returns the OS ("darwin", "windows", "linux").
 func (a *App) GetPlatform() string {
-return runtime.GOOS
+	return runtime.GOOS
 }
 
-// GetConversations returns recent conversations from ~/.localai/history.db.
+// GetConversations returns recent conversations.
 func (a *App) GetConversations() []ConversationSummary {
 	convs, _ := readConversations()
 	if convs == nil {
