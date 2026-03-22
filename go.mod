@@ -3,7 +3,6 @@ module billy-wails
 go 1.25.0
 
 require (
-	fyne.io/systray v1.12.0
 	github.com/wailsapp/wails/v2 v2.11.0
 	modernc.org/sqlite v1.47.0
 )

@@ -25,8 +25,8 @@ billyURL:  "http://127.0.0.1:7437",
 }
 
 func (a *App) startup(ctx context.Context) {
-a.ctx = ctx
-go runTray(a)
+	a.ctx = ctx
+	initTray(a)
 }
 
 func (a *App) shutdown(ctx context.Context) {}
