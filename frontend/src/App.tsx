@@ -5,6 +5,13 @@ import { GetStatus, SendMessage, ListModels, PopOut, OpenInstallPage, GetPlatfor
 import { EventsOn } from '../wailsjs/runtime/runtime';
 import { main } from '../wailsjs/go/models';
 
+type Theme = 'system' | 'dark' | 'light';
+
+function applyTheme(theme: Theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  localStorage.setItem('billy-theme', theme);
+}
+
 function App() {
   const [messages, setMessages] = useState<main.Message[]>([]);
   const [input, setInput] = useState('');
@@ -13,9 +20,22 @@ function App() {
   const [models, setModels] = useState<string[]>([]);
   const [activeModel, setActiveModel] = useState('qwen2.5-coder:7b');
   const [showModelPicker, setShowModelPicker] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [theme, setTheme] = useState<Theme>(() => {
+    return (localStorage.getItem('billy-theme') as Theme) || 'system';
+  });
   const [platform, setPlatform] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
   const streamBuffer = useRef('');
+
+  // Apply theme on mount and whenever it changes
+  useEffect(() => { applyTheme(theme); }, [theme]);
+
+  function changeTheme(t: Theme) {
+    setTheme(t);
+    applyTheme(t);
+    setShowSettings(false);
+  }
 
   useEffect(() => {
     // Load status and models on mount
@@ -103,10 +123,37 @@ function App() {
           )}
         </div>
         <div className="titlebar-right">
+          <button className="icon-btn" title="Settings" onClick={() => setShowSettings(v => !v)}>⚙</button>
           <button className="icon-btn" title="Pop out" onClick={() => PopOut()}>⤢</button>
           <button className="icon-btn" title="Clear chat" onClick={clearChat}>⊘</button>
         </div>
       </div>
+
+      {/* Settings panel */}
+      {showSettings && (
+        <>
+          <div className="settings-overlay" onClick={() => setShowSettings(false)} />
+          <div className="settings-panel">
+            <div className="settings-title">Appearance</div>
+            <div className="theme-options">
+              {([
+                { value: 'system', icon: '💻', label: 'System' },
+                { value: 'dark',   icon: '🌙', label: 'Dark'   },
+                { value: 'light',  icon: '☀️',  label: 'Light'  },
+              ] as { value: Theme; icon: string; label: string }[]).map(opt => (
+                <button
+                  key={opt.value}
+                  className={`theme-btn${theme === opt.value ? ' active' : ''}`}
+                  onClick={() => changeTheme(opt.value)}
+                >
+                  <span className="theme-icon">{opt.icon}</span>
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
 
       {/* Not installed banner */}
       {notInstalled && (
