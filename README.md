@@ -1,19 +1,49 @@
-# README
+# Billy Desktop
 
-## About
+Billy Desktop is the Wails-based desktop companion for Billy.
 
-This is the official Wails React-TS template.
+The release goal is the same one used by Logos:
 
-You can configure the project by editing `wails.json`. More information about the project settings can be found
-here: https://wails.io/docs/reference/project-config
+- ship the desktop app and the `billy` CLI together
+- let the desktop app launch `billy serve` itself when the bundled CLI is present
+- publish bundle archives that package managers can install cleanly
 
-## Live Development
+## Development
 
-To run in live development mode, run `wails dev` in the project directory. This will run a Vite development
-server that will provide very fast hot reload of your frontend changes. If you want to develop in a browser
-and have access to your Go methods, there is also a dev server that runs on http://localhost:34115. Connect
-to this in your browser, and you can call your Go code from devtools.
+```bash
+cd billy-wails/frontend
+npm install
+cd ..
+wails dev
+```
 
-## Building
+## Production build
 
-To build a redistributable, production mode package, use `wails build`.
+```bash
+wails build
+```
+
+That produces the desktop app/executable. For release bundles, pair the built GUI artifact with the `billy` CLI from `billy-app`.
+
+## Packaging
+
+See:
+
+- [packaging/README.md](./packaging/README.md)
+- [scripts/install.sh](./scripts/install.sh)
+- [scripts/release/package_bundle.sh](./scripts/release/package_bundle.sh)
+- [scripts/release/render_manifests.sh](./scripts/release/render_manifests.sh)
+- [scripts/release/build_macos_pkg.sh](./scripts/release/build_macos_pkg.sh)
+- [scripts/release/build_linux_deb.sh](./scripts/release/build_linux_deb.sh)
+
+The intended shipped artifacts are:
+
+- macOS: `billy-macos-universal.tar.gz`
+- Linux: `billy-linux-amd64-bundle.tar.gz`
+- Windows: `billy-windows-amd64-bundle.zip`
+
+Each bundle includes:
+
+- the desktop app
+- the `billy` CLI
+- a layout that allows the desktop app to locate and start `billy serve`

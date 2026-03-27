@@ -7,11 +7,11 @@
   "frontend:dev:watcher": "npm run dev",
   "frontend:dev:serverUrl": "auto",
   "info": {
-    "companyName": "Billy.sh",
+    "companyName": "JD4Codes",
     "productName": "Billy",
     "productVersion": "0.1.0",
-    "copyright": "Copyright © 2026 Billy.sh",
-    "comments": "Local AI coding assistant"
+    "copyright": "Copyright © 2026 JD4Codes",
+    "comments": "Local AI coding assistant with bundled Billy CLI"
   },
   "author": {
     "name": "Jonathan Forrider",

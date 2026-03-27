@@ -186,7 +186,7 @@ function App() {
             {activeConvTitle || 'Billy'}
           </span>
           {status && (
-            <span className={`tier-badge tier-${status.tier}`}>{status.tier}</span>
+            <span className="tier-badge">{status.tier}</span>
           )}
         </div>
         <div className="titlebar-right">

@@ -16,6 +16,8 @@ type App struct {
 	billyURL      string
 	popOut        bool
 	currentConvID string
+	billyBinary   string
+	startedBilly  *exec.Cmd
 }
 
 func NewApp() *App {
@@ -27,11 +29,23 @@ func NewApp() *App {
 
 // ServiceStartup is called by Wails v3 when the service starts.
 func (a *App) ServiceStartup(ctx context.Context, options application.ServiceOptions) error {
+	path, cmd, err := ensureBillyServeRunning(a.billyURL)
+	if err == nil {
+		a.billyBinary = path
+		a.startedBilly = cmd
+	} else {
+		a.billyBinary = path
+		println("Billy desktop startup warning:", err.Error())
+	}
 	return nil
 }
 
 // ServiceShutdown is called by Wails v3 when the service stops.
 func (a *App) ServiceShutdown() error {
+	if a.startedBilly != nil && a.startedBilly.Process != nil {
+		_ = a.startedBilly.Process.Kill()
+		_, _ = a.startedBilly.Process.Wait()
+	}
 	return nil
 }
 
@@ -83,9 +97,9 @@ func (a *App) PopOut() {
 	}
 }
 
-// OpenInstallPage opens the billy.sh install page in the default browser.
+// OpenInstallPage opens the Billy install page in the default browser.
 func (a *App) OpenInstallPage() {
-	url := "https://jd4rider.github.io/billy-web/#install"
+	url := "https://billysh.online/#install"
 	switch runtime.GOOS {
 	case "darwin":
 		exec.Command("open", url).Start()

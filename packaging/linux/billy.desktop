@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Name=Billy
+Comment=Local AI coding assistant desktop app
+Exec=/opt/billy/Billy %u
+Terminal=false
+Type=Application
+Icon=billy
+Categories=Development;Utility;
+StartupWMClass=Billy

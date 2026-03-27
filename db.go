@@ -247,7 +247,7 @@ func deleteMemory(id string) error {
 
 // buildSystemPrompt constructs the system message injected before every chat.
 func buildSystemPrompt() string {
-	base := `You are Billy, a local AI coding assistant built by billy.sh. You help developers write, debug, explain, and improve code. You are concise, practical, and prefer showing code examples over long explanations. You run entirely locally — no data ever leaves the user's machine.`
+	base := `You are Billy, a local AI coding assistant built by JD4Codes. You help developers write, debug, explain, and improve code. You are concise, practical, and prefer showing code examples over long explanations. You run entirely locally - no data ever leaves the user's machine.`
 
 	mems, err := readMemories()
 	if err != nil || len(mems) == 0 {
@@ -283,5 +283,3 @@ func countMessages(convID string) int {
 	db.QueryRow(`SELECT COUNT(*) FROM messages WHERE conversation_id = ?`, convID).Scan(&n)
 	return n
 }
-
-

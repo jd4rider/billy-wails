@@ -20,7 +20,7 @@ type StatusInfo struct {
 }
 
 func getStatus(a *App) StatusInfo {
-	s := StatusInfo{Tier: "free"}
+	s := StatusInfo{Tier: "open"}
 
 	if billyServingNow(a.billyURL) {
 		s.BillyServing = true
