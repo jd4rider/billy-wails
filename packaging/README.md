@@ -35,6 +35,13 @@ If the local tap repos exist, the script can also sync into:
 - `../homebrew-billy`
 - `../scoop-billy`
 
+To build local release assets from the current `billy-app` + `billy-wails` repos in one step:
+
+```bash
+scripts/release/build_release_assets.sh darwin
+scripts/release/build_release_assets.sh windows amd64
+```
+
 ## Why archive bundles instead of app-only assets?
 
 The archive needs to contain both the GUI app and the CLI so:
