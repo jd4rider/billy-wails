@@ -1,0 +1,67 @@
+version: '3'
+
+tasks:
+  go:mod:tidy:
+    summary: Runs `go mod tidy`
+    internal: true
+    cmds:
+      - go mod tidy
+
+  install:frontend:deps:
+    summary: Install frontend dependencies
+    dir: frontend
+    sources:
+      - package.json
+      - package-lock.json
+    generates:
+      - node_modules
+    preconditions:
+      - sh: npm version
+        msg: "Looks like npm isn't installed. Npm is part of the Node installer: https://nodejs.org/en/download/"
+    cmds:
+      - npm install
+
+  build:frontend:
+    label: build:frontend (DEV={{.DEV}})
+    summary: Build the frontend project
+    dir: frontend
+    sources:
+      - "**/*"
+      - exclude: node_modules/**/*
+    generates:
+      - dist/**/*
+    deps:
+      - task: install:frontend:deps
+    cmds:
+      - npm run {{.BUILD_COMMAND}} -q
+    env:
+      PRODUCTION: '{{if eq .DEV "true"}}false{{else}}true{{end}}'
+    vars:
+      BUILD_COMMAND: '{{if eq .DEV "true"}}build:dev{{else}}build{{end}}'
+
+  generate:icons:
+    summary: Generates Windows `.ico` and Mac `.icns` from build/appicon.png
+    dir: build
+    sources:
+      - appicon.png
+    generates:
+      - darwin/icons.icns
+      - windows/icon.ico
+    cmds:
+      - wails3 generate icons -input appicon.png -macfilename darwin/icons.icns -windowsfilename windows/icon.ico
+
+  dev:frontend:
+    summary: Runs the frontend in development mode
+    dir: frontend
+    deps:
+      - task: install:frontend:deps
+    cmds:
+      - npm run dev -- --port {{.VITE_PORT}} --strictPort
+
+  setup:docker:
+    summary: Builds Docker image for cross-compilation
+    cmds:
+      - docker build -t wails-cross -f build/docker/Dockerfile.cross build/docker/
+    preconditions:
+      - sh: docker info > /dev/null 2>&1
+        msg: "Docker is required to build the wails-cross image."

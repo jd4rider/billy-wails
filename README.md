@@ -14,13 +14,13 @@ The release goal is the same one used by Logos:
 cd billy-wails/frontend
 npm install
 cd ..
-wails dev
+/Users/jonathanforrider/go/bin/wails3 dev
 ```
 
 ## Production build
 
 ```bash
-wails build
+/Users/jonathanforrider/go/bin/wails3 build
 ```
 
 That produces the desktop app/executable. For release bundles, pair the built GUI artifact with the `billy` CLI from `billy-app`.

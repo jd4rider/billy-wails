@@ -49,3 +49,12 @@ Once the GUI artifact and CLI artifact exist, native package helpers are availab
 
 - `scripts/release/build_macos_pkg.sh` builds a macOS `.pkg`
 - `scripts/release/build_linux_deb.sh` builds Linux packages through `nfpm`
+
+## Linux note
+
+Native Linux GUI builds need a Linux CGO toolchain. From macOS or Windows, use Docker:
+
+```bash
+/Users/jonathanforrider/go/bin/wails3 task setup:docker
+/Users/jonathanforrider/go/bin/wails3 task linux:build
+```
