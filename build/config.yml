@@ -7,7 +7,7 @@ info:
   description: "Local AI coding assistant with bundled Billy CLI"
   copyright: "Copyright (c) 2026, JD4Codes"
   comments: "Desktop companion for Billy"
-  version: "0.1.0"
+  version: "0.2.0"
 
 dev_mode:
   root_path: .

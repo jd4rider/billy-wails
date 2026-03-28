@@ -5,7 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 GUI_BINARY="${1:-}"
 CLI_BINARY="${2:-}"
 PACKAGER="${PACKAGER:-deb}"
-VERSION="${VERSION:-0.1.0-dev}"
+VERSION="${VERSION:-0.2.0-dev}"
 ARCH="${ARCH:-amd64}"
 OUT_DIR="${OUT_DIR:-$ROOT_DIR/dist}"
 
